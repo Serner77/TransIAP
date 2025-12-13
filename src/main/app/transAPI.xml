@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/apikit http://www.mulesoft.org/schema/mule/apikit/current/mule-apikit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <http:listener-config name="transAPI-httpListenerConfig" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <apikit:config name="transAPI-config" raml="transAPI.raml" consoleEnabled="false" doc:name="Router"/>
+    <flow name="transAPI-main">
+        <http:listener config-ref="transAPI-httpListenerConfig" path="/*" doc:name="HTTP"/>
+        <apikit:router config-ref="transAPI-config" doc:name="APIkit Router"/>
+        <exception-strategy ref="transAPI-apiKitGlobalExceptionMapping" doc:name="Reference Exception Strategy"/>
+    </flow>
+    <flow name="transAPI-console">
+        <http:listener config-ref="transAPI-httpListenerConfig" path="/console/*" doc:name="HTTP"/>
+        <apikit:console config-ref="transAPI-config" doc:name="APIkit Console"/>
+    </flow>
+    <flow name="put:/traslados/{idTraslado}:application/json:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="put:/traslados/{idTraslado}:application/xml:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="delete:/solicitudes-transporte/{idSolicitud}:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="get:/companias/{idCompania}/contenedores:transAPI-config">
+		<set-variable variableName="Contenedores" value="#[message.inboundProperties.accept]" doc:name="Variable"/>
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT con.idc, con.tipo, con.peso, con.precinto, con.dimension
+FROM contenedor con, solicitud_descarga sol 
+WHERE con.descarga = sol.id AND sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Contenedores=='application/json']">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+}]]></dw:set-payload>
+				</dw:transform-message>
+				<logger message="aQUI" level="INFO" doc:name="Logger"/>
+			</otherwise>
+		</choice>
+
+    </flow>
+    <flow name="get:/companias/{idCompania}/traslados:transAPI-config">
+		<set-variable variableName="Accept" value="#[message.inboundProperties.accept]" doc:name="Variable"/>
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT * 
+FROM traslado tra, contenedor con, solicitud_descarga sol 
+WHERE tra.contenedor = con.idc AND con.descarga = sol.id AND sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept == 'application/json']">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</otherwise>
+		</choice>
+
+    </flow>
+    <flow name="get:/contenedores/{idContenedor}:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="get:/solicitudes-transporte/{idSolicitud}:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="get:/traslados/{idTraslado}:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="post:/traslados/{idTraslado}/localizaciones:application/json:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="post:/traslados/{idTraslado}/localizaciones:application/xml:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="post:/traslados/{idTraslado}/solicitud-transporte:application/json:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <flow name="post:/traslados/{idTraslado}/solicitud-transporte:application/xml:transAPI-config">
+        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+    </flow>
+    <apikit:mapping-exception-strategy name="transAPI-apiKitGlobalExceptionMapping">
+        <apikit:mapping statusCode="404">
+            <apikit:exception value="org.mule.module.apikit.exception.NotFoundException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Resource not found&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="405">
+            <apikit:exception value="org.mule.module.apikit.exception.MethodNotAllowedException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Method not allowed&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="415">
+            <apikit:exception value="org.mule.module.apikit.exception.UnsupportedMediaTypeException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Unsupported media type&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="406">
+            <apikit:exception value="org.mule.module.apikit.exception.NotAcceptableException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Not acceptable&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="400">
+            <apikit:exception value="org.mule.module.apikit.exception.BadRequestException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Bad request&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+    </apikit:mapping-exception-strategy>
+</mule>
