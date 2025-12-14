@@ -1,0 +1,11 @@
+{
+    "inputMessageMetadata": {},
+    "outputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "API_contenedoresNaviera"
+        }
+    },
+    "id": "52293dc5-38e2-4102-a385-e4d2c0115d51",
+    "version": "5.2.0.0"
+}

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/apikit http://www.mulesoft.org/schema/mule/apikit/current/mule-apikit.xsd
 http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
@@ -11,6 +11,7 @@ http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee
     <apikit:config name="transAPI-config" raml="transAPI.raml" consoleEnabled="false" doc:name="Router"/>
     <flow name="transAPI-main">
         <http:listener config-ref="transAPI-httpListenerConfig" path="/*" doc:name="HTTP"/>
+		<set-variable variableName="Accept" value="#[message.inboundProperties.accept]" doc:name="Variable"/>
         <apikit:router config-ref="transAPI-config" doc:name="APIkit Router"/>
         <exception-strategy ref="transAPI-apiKitGlobalExceptionMapping" doc:name="Reference Exception Strategy"/>
     </flow>
@@ -28,42 +29,82 @@ http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
     </flow>
     <flow name="get:/companias/{idCompania}/contenedores:transAPI-config">
-		<set-variable variableName="Contenedores" value="#[message.inboundProperties.accept]" doc:name="Variable"/>
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
 			<db:parameterized-query><![CDATA[SELECT con.idc, con.tipo, con.peso, con.precinto, con.dimension
 FROM contenedor con, solicitud_descarga sol 
 WHERE con.descarga = sol.id AND sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]]]></db:parameterized-query>
 		</db:select>
 		<choice doc:name="Choice">
-			<when expression="#[flowVars.Contenedores=='application/json']">
+			<when expression="#[flowVars.Accept contains 'application/json']">
 				<json:object-to-json-transformer doc:name="Object to JSON"/>
 			</when>
 			<otherwise>
-				<dw:transform-message doc:name="Transform Message">
+				<dw:transform-message doc:name="Transform Message" metadata:id="52293dc5-38e2-4102-a385-e4d2c0115d51">
 					<dw:set-payload><![CDATA[%dw 1.0
-%output application/java
+%output application/xml
 ---
 {
+	contenedores: {
+		(payload map ((payload01 , indexOfPayload01) -> {
+			contenedor: {
+				idc: payload01.idc,
+				tipo: payload01.tipo,
+				peso: payload01.peso,
+				dimension: payload01.dimension,
+				precinto: payload01.precinto
+			}
+		}))
+	}
 }]]></dw:set-payload>
 				</dw:transform-message>
-				<logger message="aQUI" level="INFO" doc:name="Logger"/>
 			</otherwise>
 		</choice>
 
     </flow>
     <flow name="get:/companias/{idCompania}/traslados:transAPI-config">
-		<set-variable variableName="Accept" value="#[message.inboundProperties.accept]" doc:name="Variable"/>
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
-			<db:parameterized-query><![CDATA[SELECT * 
-FROM traslado tra, contenedor con, solicitud_descarga sol 
-WHERE tra.contenedor = con.idc AND con.descarga = sol.id AND sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]]]></db:parameterized-query>
+			<db:parameterized-query><![CDATA[SELECT
+    tra.idt,
+    tra.fechaEntrega,
+    tra.estado,
+    tra.contenedor,
+    dir.ciudad,
+    dir.codigo_pais
+FROM traslado tra
+JOIN contenedor con ON tra.contenedor = con.idc
+JOIN solicitud_descarga sol ON con.descarga = sol.id
+JOIN direccion dir ON tra.destino = dir.id
+WHERE sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania] 
+  AND tra.estado = CASE 
+                       WHEN #[message.inboundProperties.'http.query.params'.entregado] = 'true' THEN 'entregado' 
+                       WHEN #[message.inboundProperties.'http.query.params'.entregado] = 'false' THEN 'pendiente' 
+                       ELSE tra.estado
+                   END]]></db:parameterized-query>
 		</db:select>
 		<choice doc:name="Choice">
 			<when expression="#[flowVars.Accept == 'application/json']">
 				<json:object-to-json-transformer doc:name="Object to JSON"/>
 			</when>
 			<otherwise>
-				<json:object-to-json-transformer doc:name="Object to JSON"/>
+				<dw:transform-message doc:name="Transform Message" metadata:id="427a9efc-51bb-4beb-9985-b2853e51d7e9">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+	traslados: {
+		(payload map ((payload01 , indexOfPayload01) -> {
+			traslado: {
+				idTraslado: payload01.idt,
+				fechaEntrega: payload01.fechaEntrega,
+				estado: payload01.estado,
+				idContenedor: payload01.contenedor,
+				ciudad: payload01.ciudad,
+				pais: payload01.codigo_pais
+			}
+		}))
+	}
+}]]></dw:set-payload>
+				</dw:transform-message>
 			</otherwise>
 		</choice>
 
