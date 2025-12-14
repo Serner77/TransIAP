@@ -3,7 +3,7 @@
     "outputMessageMetadata": {
         "messagePayload": {
             "connectorName": "#_custom_mule_metadata_type_#",
-            "typeId": "API_contenedoresNaviera"
+            "typeId": "API_delete-solicitud-transporte"
         }
     },
     "id": "52293dc5-38e2-4102-a385-e4d2c0115d51",

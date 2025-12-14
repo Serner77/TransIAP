@@ -26,7 +26,11 @@ http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
     </flow>
     <flow name="delete:/solicitudes-transporte/{idSolicitud}:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+		<db:delete config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[DELETE FROM solicitud_transporte 
+WHERE id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:parameterized-query>
+		</db:delete>
+
     </flow>
     <flow name="get:/companias/{idCompania}/contenedores:transAPI-config">
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
@@ -110,10 +114,65 @@ WHERE sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]
 
     </flow>
     <flow name="get:/contenedores/{idContenedor}:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+        <set-payload value="#[flowVars.Accept]" doc:name="Accept"/>
     </flow>
     <flow name="get:/solicitudes-transporte/{idSolicitud}:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT 
+    st.id AS solicitud_id,
+    st.timestamp AS solicitud_timestamp,
+    st.aprobada AS solicitud_aprobada,
+    st.terminada AS solicitud_terminada,
+    st.traslado AS solicitud_traslado,
+
+    v.matricula AS vehiculo_matricula,
+    v.PMA AS vehiculo_pma,
+    v.ETN AS vehiculo_etn,
+
+    t.id AS transportista_id,
+    t.nombre AS transportista_nombre,
+    t.licencia AS transportista_licencia,
+    t.externo AS transportista_externo
+    
+FROM solicitud_transporte st
+INNER JOIN vehiculo v ON st.vehiculo = v.matricula
+INNER JOIN transportista t ON v.transportista = t.id
+WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept == &quot;application/json&quot;]">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message" metadata:id="52293dc5-38e2-4102-a385-e4d2c0115d51">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+	respuestaSolicitud: {
+		solicitud: {
+			id: payload.solicitud_id,
+			timestamp: payload.solicitud_timestamp,
+			aprobada: payload.solicitud_aprobada,
+			terminada: payload.solicitud_terminada,
+			idTraslado: payload.solicitud_traslado
+		},
+		vehiculo: {
+			matricula: payload.vehiculo_matricula,
+			PMA: payload.vehiculo_pma,
+			ETN: payload.vehiculo_etn
+		},
+		transportista: {
+			nombre: payload.transportista_nombre,
+			licencia: payload.transportista_licencia,
+			externo: payload.transportista_externo
+		}
+	}
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</otherwise>
+		</choice>
+
     </flow>
     <flow name="get:/traslados/{idTraslado}:transAPI-config">
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
