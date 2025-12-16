@@ -192,6 +192,24 @@ types:
       responses:
         200:
           description: Estado actualizado correctamente
+          body:
+            application/json:
+             properties:
+               mensaje:
+                type: string
+        400:
+          body:
+            application/json:
+              properties:
+                mensaje:
+                  type: string
+        404:
+          body:
+            application/json:
+              properties:
+                mensaje:
+                  type: string
+        
 
     /localizaciones:
       post:

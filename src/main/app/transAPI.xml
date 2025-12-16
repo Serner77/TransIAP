@@ -20,7 +20,37 @@ http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee
         <apikit:console config-ref="transAPI-config" doc:name="APIkit Console"/>
     </flow>
     <flow name="put:/traslados/{idTraslado}:application/json:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload.estado]]></dw:set-payload>
+		</dw:transform-message>
+		<choice doc:name="Choice">
+			<when expression="#[payload == 'disponible' || payload == 'asignado' || payload == 'entregado']">
+				<db:update config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[UPDATE traslado
+SET estado = #[payload],
+    ultima_ubicacion = NULL
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
+				</db:update>
+				<choice doc:name="Choice">
+					<when expression="payload &gt; 0">
+						<set-payload value="#[{'mensaje' : 'Estado actualizado correctamente'}]
+" doc:name="Set Payload"/>
+					</when>
+					<otherwise>
+						<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
+						<set-payload value="#[{ &quot;mensaje&quot;: &quot;Traslado no encontrado&quot; }]" doc:name="Set Payload"/>
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise>
+				<set-property propertyName="httpStatus" value="400" doc:name="Property"/>
+				<set-payload value="#[{ &quot;mensaje&quot;: &quot;Estado no v&#225;lido. Use: disponible, asignado o entregado&quot; }]" doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
+
     </flow>
     <flow name="put:/traslados/{idTraslado}:application/xml:transAPI-config">
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
@@ -114,7 +144,59 @@ WHERE sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]
 
     </flow>
     <flow name="get:/contenedores/{idContenedor}:transAPI-config">
-        <set-payload value="#[flowVars.Accept]" doc:name="Accept"/>
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT 
+    con.idc AS contenedor_id,
+    con.tipo,
+    con.dimension,
+    con.peso,
+    con.precinto,
+    tra.idt AS traslado_id,
+    tra.fechaEntrega,
+    tra.estado AS traslado_estado,
+    dir.direccion,
+    dir.ciudad,
+    dir.codigo_pais
+FROM contenedor con
+LEFT JOIN traslado tra 
+    ON con.idc = tra.contenedor
+LEFT JOIN direccion dir 
+    ON tra.destino = dir.id
+WHERE con.idc = #[message.inboundProperties.'http.uri.params'.idContenedor]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept == 'application/json']">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message" metadata:id="427a9efc-51bb-4beb-9985-b2853e51d7e9">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+  traslados: {
+    (payload map ((item, index) -> {
+      traslado: {
+        idTraslado: item.traslado_id,
+        fechaEntrega: item.fechaEntrega,
+        estado: item.traslado_estado,
+        idContenedor: item.contenedor_id,
+        dimension: item.dimension,
+        peso: item.peso,
+        precinto: item.precinto,
+        tipo: item.tipo,
+        direccion: item.direccion,
+        ciudad: item.ciudad,
+        pais: item.codigo_pais
+      }
+    }))
+  }
+}
+]]></dw:set-payload>
+				</dw:transform-message>
+			</otherwise>
+		</choice>
+
     </flow>
     <flow name="get:/solicitudes-transporte/{idSolicitud}:transAPI-config">
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
