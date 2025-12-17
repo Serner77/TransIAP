@@ -260,10 +260,75 @@ WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
     </flow>
     <flow name="post:/traslados/{idTraslado}/localizaciones:application/json:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+		<set-variable variableName="Cabecera" value="#[message.inboundProperties.content-type]" doc:name="Variable"/>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Cabecera=='application/json']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="81e90fd3-f3b9-4ce8-9a26-906b828416a9">
+					<dw:input-payload mimeType="application/json"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	latitud: payload.latitud as :string,
+	longitud: payload.longitud as :string,
+	timestamp: payload.timestamp,
+	traslado: payload.traslado
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</when>
+			<when expression="#[flowVars.Cabecera=='text/xml']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="a5d4ca55-c626-488d-ad6a-ba7241f00692">
+					<dw:input-payload mimeType="application/xml"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	latitud: payload.localizacion.latitud as :string,
+	longitud: payload.localizacion.longitud as :string,
+	timestamp: payload.localizacion.timestamp as :string,
+	traslado: payload.localizacion.traslado
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</when>
+			<otherwise>
+				<set-property propertyName="httpType" value="400" doc:name="Property"/>
+				<set-payload value="#[{&quot;message&quot;: &quot;Tipo no v&#225;lido&quot;}]" doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
+		<set-variable variableName="TrasladoVariable" value="#[payload]" doc:name="Variable"/>
+
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT *
+FROM traslado
+WHERE idt = '#[payload.traslado]']]></db:parameterized-query>
+
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[isEmpty(payload)]">
+				<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
+				<set-payload value="#[{&quot;error&quot;: &quot;EL traslado no existe&quot;}]" doc:name="Set Payload"/>
+			</when>
+			<otherwise>
+				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[INSERT INTO localizacion_gps(timestamp, traslado, latitud, longitud)
+VALUES(#[flowVars.TrasladoVariable.timestamp],#[flowVars.TrasladoVariable.traslado],#[flowVars.TrasladoVariable.latitud],#[flowVars.TrasladoVariable.longitud])]]></db:parameterized-query>
+				</db:insert>
+
+				<db:update config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[UPDATE traslado
+SET 
+	ultima_ubicacion = #[flowVars.TrasladoVariable.timestamp]
+WHERE idt = #[flowVars.TrasladoVariable.traslado]]]></db:parameterized-query>
+
+				</db:update>
+				<set-payload value="#[{ok: true,  idTraslado: #[flowVars.TrasladoVariable.traslado],  ultima_ubicacion: #[flowVars.TrasladoVaribale.timestamp] }] " doc:name="Set Payload"/>
+
+			</otherwise>
+		</choice>
+
     </flow>
     <flow name="post:/traslados/{idTraslado}/localizaciones:application/xml:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+
     </flow>
     <flow name="post:/traslados/{idTraslado}/solicitud-transporte:application/json:transAPI-config">
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
