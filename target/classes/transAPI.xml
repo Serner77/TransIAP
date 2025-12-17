@@ -259,7 +259,7 @@ WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:
     <flow name="get:/traslados/{idTraslado}:transAPI-config">
         <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
     </flow>
-    <flow name="post:/traslados/{idTraslado}/localizaciones:application/json:transAPI-config">
+    <flow name="post:/traslados/{idTraslado}/localizaciones:transAPI-config">
 		<set-variable variableName="Cabecera" value="#[message.inboundProperties.content-type]" doc:name="Variable"/>
 		<choice doc:name="Choice">
 			<when expression="#[flowVars.Cabecera=='application/json']">
@@ -300,7 +300,7 @@ WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
 			<db:parameterized-query><![CDATA[SELECT *
 FROM traslado
-WHERE idt = '#[payload.traslado]']]></db:parameterized-query>
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
 
 		</db:select>
 		<choice doc:name="Choice">
@@ -327,15 +327,64 @@ WHERE idt = #[flowVars.TrasladoVariable.traslado]]]></db:parameterized-query>
 		</choice>
 
     </flow>
-    <flow name="post:/traslados/{idTraslado}/localizaciones:application/xml:transAPI-config">
+
+    <flow name="post:/traslados/{idTraslado}/solicitud-transporte:transAPI-config">
+		<set-variable variableName="idTraslado" value="#[message.inboundProperties.'http.uri.params'.idTraslado]" doc:name="Variable"/>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Cabecera=='application/json']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="6967a31c-bc05-42a5-aa61-36f328b0a5df">
+					<dw:input-payload mimeType="application/json"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	idTraslado: payload.traslado,
+	vehiculo: payload.vehiculo
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</when>
+			<when expression="#[flowVars.Cabecera=='text/xml']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="398271c4-ecf9-47cf-9072-e81aa7331359">
+					<dw:input-payload mimeType="application/xml"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	idTraslado: payload.solicitudTransporte.traslado,
+	vehiculo: payload.solicitudTransporte.vehiculo
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</when>
+			<otherwise>
+				<set-property propertyName="httpType" value="400" doc:name="Property"/>
+				<set-payload value="#[{&quot;message&quot;: &quot;Tipo no v&#225;lido&quot;}]" doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
+		<set-variable variableName="SolicitudVariable" value="#[payload]" doc:name="Variable"/>
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT *
+FROM traslado
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[isEmpty(payload)]">
+				<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
+				<set-payload value="#[{&quot;error&quot;: &quot;EL traslado no existe&quot;}]" doc:name="Set Payload"/>
+			</when>
+			<otherwise>
+				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[INSERT INTO solicitud_transporte(timestamp, aprobada, terminada, traslado, vehiculo)
+VALUES(CURRENT_TIMESTAMP,0,0,
+  #[flowVars.SolicitudVariable.traslado],
+  #[flowVars.SolicitudVariable.vehiculo]
+)]]></db:parameterized-query>
+				</db:insert>
+				<set-payload value="#[{ok: true,  idTraslado: #[flowVars.TrasladoVariable.traslado]}] " doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
 
     </flow>
-    <flow name="post:/traslados/{idTraslado}/solicitud-transporte:application/json:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
-    </flow>
-    <flow name="post:/traslados/{idTraslado}/solicitud-transporte:application/xml:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
-    </flow>
+
     <apikit:mapping-exception-strategy name="transAPI-apiKitGlobalExceptionMapping">
         <apikit:mapping statusCode="404">
             <apikit:exception value="org.mule.module.apikit.exception.NotFoundException" />

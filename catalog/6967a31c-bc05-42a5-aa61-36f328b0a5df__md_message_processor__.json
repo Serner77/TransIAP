@@ -8,9 +8,9 @@
     "outputMessageMetadata": {
         "messagePayload": {
             "connectorName": "#_custom_mule_metadata_type_#",
-            "typeId": "TrasladoMap"
+            "typeId": "solTrasladoMap"
         }
     },
-    "id": "81e90fd3-f3b9-4ce8-9a26-906b828416a9",
+    "id": "6967a31c-bc05-42a5-aa61-36f328b0a5df",
     "version": "5.2.0.0"
 }
