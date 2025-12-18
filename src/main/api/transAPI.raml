@@ -163,21 +163,6 @@ types:
       idTraslado:
         type: string
 
-    get:
-      description: Obtiene la información de un traslado.
-      responses:
-        200:
-          body:
-            application/json:
-              type: Traslado
-            application/xml:
-              type: Traslado
-        404:
-          body:
-            text/plain:
-              type: string
-              example: "Traslado no encontrado"
-
     put:
       description: Cambia el estado de un traslado.
       body:

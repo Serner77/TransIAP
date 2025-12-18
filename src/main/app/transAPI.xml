@@ -256,9 +256,7 @@ WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:
 		</choice>
 
     </flow>
-    <flow name="get:/traslados/{idTraslado}:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
-    </flow>
+
     <flow name="post:/traslados/{idTraslado}/localizaciones:transAPI-config">
 		<set-variable variableName="Cabecera" value="#[message.inboundProperties.content-type]" doc:name="Variable"/>
 		<choice doc:name="Choice">
