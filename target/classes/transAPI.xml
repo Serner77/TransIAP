@@ -286,7 +286,6 @@ WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:
 payload
 ]]></dw:set-payload>
 				</dw:transform-message>
-				<logger message="#[payload]" level="INFO" doc:name="Logger"/>
 				<dw:transform-message doc:name="Transform Message">
 					<dw:set-payload><![CDATA[%dw 1.0
 %output application/java
@@ -308,7 +307,6 @@ payload
 			</otherwise>
 		</choice>
 		<set-variable variableName="TrasladoVariable" value="#[payload]" doc:name="Variable"/>
-		<logger message="#[flowVars.TrasladoVariable]" level="INFO" doc:name="Logger"/>
 
 
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
@@ -345,31 +343,31 @@ WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:par
     </flow>
 
     <flow name="post:/traslados/{idTraslado}/solicitud-transporte:transAPI-config">
-		<set-variable variableName="idTraslado" value="#[message.inboundProperties.'http.uri.params'.idTraslado]" doc:name="Variable"/>
+		<set-variable variableName="Cabecera" value="#[message.inboundProperties['Content-Type']]" doc:name="Variable"/>
 		<choice doc:name="Choice">
 
-			<when expression="#[flowVars.Cabecera=='text/xml']">
+			<when expression="#[flowVars.Cabecera=='application/json']">
 				<dw:transform-message doc:name="Transform Message" metadata:id="398271c4-ecf9-47cf-9072-e81aa7331359">
 					<dw:input-payload mimeType="application/xml"/>
 					<dw:set-payload><![CDATA[%dw 1.0
 %output application/java
 ---
 {
-	idTraslado: payload.solicitudTransporte.traslado,
-	vehiculo: payload.solicitudTransporte.vehiculo
+    idTraslado: payload.traslado,
+    vehiculo: payload.vehiculo
 }]]></dw:set-payload>
 				</dw:transform-message>
 
 			</when>
-			<when expression="">
+			<when expression="#[flowVars.Cabecera=='application/xml']">
 				<dw:transform-message doc:name="Transform Message" metadata:id="6967a31c-bc05-42a5-aa61-36f328b0a5df">
 					<dw:input-payload mimeType="application/json"/>
 					<dw:set-payload><![CDATA[%dw 1.0
 %output application/java
 ---
 {
-	idTraslado: payload.traslado,
-	vehiculo: payload.vehiculo
+    idTraslado: payload.solicitudTransporte.traslado,
+    vehiculo: payload.solicitudTransporte.vehiculo
 }]]></dw:set-payload>
 				</dw:transform-message>
 			</when>
@@ -389,7 +387,16 @@ WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:par
 				<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
 
 			</when>
+			<otherwise>
+				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[INSERT INTO solicitud_transporte(timestamp, aprobada, terminada, traslado, vehiculo)
+VALUES(CURRENT_TIMESTAMP,0,0,
+  #[flowVars.SolicitudVariable.traslado],
+  #[flowVars.SolicitudVariable.vehiculo]
+)]]></db:parameterized-query>
+				</db:insert>
 
+			</otherwise>
 		</choice>
 
     </flow>
