@@ -283,24 +283,22 @@ WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:
 					<dw:set-payload><![CDATA[%dw 1.0
 %output application/java
 ---
-payload.LocalizacionGPS
+payload
 ]]></dw:set-payload>
 				</dw:transform-message>
 				<logger message="#[payload]" level="INFO" doc:name="Logger"/>
-				<dw:transform-message doc:name="Transform Message" metadata:id="a5d4ca55-c626-488d-ad6a-ba7241f00692">
-					<dw:input-payload mimeType="application/xml"/>
+				<dw:transform-message doc:name="Transform Message">
 					<dw:set-payload><![CDATA[%dw 1.0
 %output application/java
 ---
 {
-	latitud: payload.localizacion.latitud as :string,
-	longitud: payload.localizacion.longitud as :string,
-	timestamp: (payload.localizacion.timestamp as :datetime)
+	latitud: payload.LocalizacionGPS.latitud as :string,
+	longitud: payload.LocalizacionGPS.longitud as :string,
+	timestamp:
+    (payload.LocalizacionGPS.timestamp as :datetime)
       as :string
       { format: "yyyy-MM-dd HH:mm:ss" }
-}
-
-]]></dw:set-payload>
+}]]></dw:set-payload>
 				</dw:transform-message>
 			</when>
 
@@ -310,6 +308,7 @@ payload.LocalizacionGPS
 			</otherwise>
 		</choice>
 		<set-variable variableName="TrasladoVariable" value="#[payload]" doc:name="Variable"/>
+		<logger message="#[flowVars.TrasladoVariable]" level="INFO" doc:name="Logger"/>
 
 
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
