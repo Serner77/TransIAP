@@ -10,8 +10,6 @@ mediaType:
 
 description: >
   API REST del sistema STC del proyecto TransIAP.
-  Los tipos están definidos a partir del esquema real
-  de la base de datos STC.
 
 types:
 
@@ -79,11 +77,6 @@ types:
   SolicitudTransporte:
     type: object
     properties:
-      id: integer
-      timestamp: datetime
-      aprobada: integer
-      terminada: integer
-      traslado: string
       vehiculo: string
 
   SolicitudDescarga:
@@ -212,13 +205,9 @@ types:
         description: Solicita transporte para un traslado.
         body:
           application/json:
-            properties:
-              vehiculo:
-                type: string
+            type: SolicitudTransporte
           application/xml:
-            properties:
-              vehiculo:
-                type: string
+            type: SolicitudTransporte
         responses:
           201:
             description: Solicitud de transporte creada correctamente

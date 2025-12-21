@@ -347,27 +347,31 @@ WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:par
 		<choice doc:name="Choice">
 
 			<when expression="#[flowVars.Cabecera=='application/json']">
-				<dw:transform-message doc:name="Transform Message" metadata:id="398271c4-ecf9-47cf-9072-e81aa7331359">
-					<dw:input-payload mimeType="application/xml"/>
-					<dw:set-payload><![CDATA[%dw 1.0
-%output application/java
----
-{
-    idTraslado: payload.traslado,
-    vehiculo: payload.vehiculo
-}]]></dw:set-payload>
-				</dw:transform-message>
-
-			</when>
-			<when expression="#[flowVars.Cabecera=='application/xml']">
 				<dw:transform-message doc:name="Transform Message" metadata:id="6967a31c-bc05-42a5-aa61-36f328b0a5df">
 					<dw:input-payload mimeType="application/json"/>
 					<dw:set-payload><![CDATA[%dw 1.0
 %output application/java
 ---
 {
-    idTraslado: payload.solicitudTransporte.traslado,
-    vehiculo: payload.solicitudTransporte.vehiculo
+    vehiculo: payload.vehiculo
+}]]></dw:set-payload>
+				</dw:transform-message>
+
+			</when>
+			<when expression="#[flowVars.Cabecera=='application/xml']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="398271c4-ecf9-47cf-9072-e81aa7331359">
+					<dw:input-payload mimeType="application/xml"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+				</dw:transform-message>
+				<dw:transform-message doc:name="Transform Message" metadata:id="03768aba-ad8c-4584-b3cb-6aa025a80112">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+    vehiculo: payload.SolicitudTransporte.vehiculo
 }]]></dw:set-payload>
 				</dw:transform-message>
 			</when>
@@ -377,27 +381,32 @@ WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:par
 			</otherwise>
 		</choice>
 		<set-variable variableName="SolicitudVariable" value="#[payload]" doc:name="Variable"/>
+		<logger message="Json transformado" level="INFO" doc:name="Logger"/>
 		<db:select config-ref="MySQL_Configuration" doc:name="Database">
 			<db:parameterized-query><![CDATA[SELECT *
 FROM traslado
 WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
 		</db:select>
 		<choice doc:name="Choice">
-			<when expression="#[isEmpty(payload)]">
+			<when expression="#[payload == null or payload.size() == 0]">
 				<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
-
 			</when>
 			<otherwise>
+				<set-variable variableName="RandomId" value="#[System.currentTimeMillis() % 1000000000]" doc:name="Variable"/>
 				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
-					<db:parameterized-query><![CDATA[INSERT INTO solicitud_transporte(timestamp, aprobada, terminada, traslado, vehiculo)
-VALUES(CURRENT_TIMESTAMP,0,0,
-  #[flowVars.SolicitudVariable.traslado],
+					<db:parameterized-query><![CDATA[INSERT INTO solicitud_transporte(id, timestamp, aprobada, terminada, traslado, vehiculo)
+VALUES(
+  #[flowVars.RandomId],
+  CURRENT_TIMESTAMP,
+  0,
+  0,
+  #[message.inboundProperties.'http.uri.params'.idTraslado],
   #[flowVars.SolicitudVariable.vehiculo]
 )]]></db:parameterized-query>
 				</db:insert>
-
 			</otherwise>
 		</choice>
+
 
     </flow>
 

@@ -6,10 +6,7 @@
         }
     },
     "outputMessageMetadata": {
-        "messagePayload": {
-            "connectorName": "#_custom_mule_metadata_type_#",
-            "typeId": "solTrasladoMap"
-        }
+        "messagePayload": {}
     },
     "id": "398271c4-ecf9-47cf-9072-e81aa7331359",
     "version": "5.2.0.0"
