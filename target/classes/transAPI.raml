@@ -85,6 +85,12 @@ types:
       id: integer
       fecha: string
       naviera: string
+      
+  TrasladoEstado:
+    type: object
+    properties:
+      estado:
+        type: string
 
 /companias:
   /{idCompania}:
@@ -159,13 +165,9 @@ types:
       description: Cambia el estado de un traslado.
       body:
         application/json:
-          properties:
-            estado:
-              type: string
+          type: TrasladoEstado
         application/xml:
-          properties:
-            estado:
-              type: string
+          type: TrasladoEstado
       responses:
         200:
           description: Estado actualizado correctamente

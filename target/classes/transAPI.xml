@@ -20,13 +20,9 @@ http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/
         <http:listener config-ref="transAPI-httpListenerConfig" path="/console/*" doc:name="HTTP"/>
         <apikit:console config-ref="transAPI-config" doc:name="APIkit Console"/>
     </flow>
-    <flow name="put:/traslados/{idTraslado}:application/json:transAPI-config">
-		<dw:transform-message doc:name="Transform Message">
-			<dw:set-payload><![CDATA[%dw 1.0
-%output application/java
----
-payload.estado]]></dw:set-payload>
-		</dw:transform-message>
+	<flow name="cambiarEstadoTraslado">
+		<logger message="#[payload]" level="INFO" doc:name="Logger"/>
+		<logger message="DEBUG | payload='#[payload]' | type=#[payload.getClass()]" level="INFO" doc:name="Logger"/>
 		<choice doc:name="Choice">
 			<when expression="#[payload == 'disponible' || payload == 'asignado' || payload == 'entregado']">
 				<db:update config-ref="MySQL_Configuration" doc:name="Database">
@@ -37,8 +33,7 @@ WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:par
 				</db:update>
 				<choice doc:name="Choice">
 					<when expression="payload &gt; 0">
-						<set-payload value="#[{'mensaje' : 'Estado actualizado correctamente'}]
-" doc:name="Set Payload"/>
+						<set-payload value="#[{'mensaje' : 'Estado actualizado correctamente'}] " doc:name="Set Payload"/>
 					</when>
 					<otherwise>
 						<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
@@ -51,10 +46,27 @@ WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:par
 				<set-payload value="#[{ &quot;mensaje&quot;: &quot;Estado no v&#225;lido. Use: disponible, asignado o entregado&quot; }]" doc:name="Set Payload"/>
 			</otherwise>
 		</choice>
+	</flow>
+    <flow name="put:/traslados/{idTraslado}:application/json:transAPI-config">
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload.estado]]></dw:set-payload>
+		</dw:transform-message>
+		<flow-ref name="cambiarEstadoTraslado" doc:name="Flow Reference"/>
+
 
     </flow>
     <flow name="put:/traslados/{idTraslado}:application/xml:transAPI-config">
-        <set-payload value="#[NullPayload.getInstance()]" doc:name="Set Payload"/>
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload.TrasladoEstado.estado]]></dw:set-payload>
+		</dw:transform-message>
+		<flow-ref name="cambiarEstadoTraslado" doc:name="Flow Reference"/>
+
     </flow>
     <flow name="delete:/solicitudes-transporte/{idSolicitud}:transAPI-config">
 		<db:delete config-ref="MySQL_Configuration" doc:name="Database">
