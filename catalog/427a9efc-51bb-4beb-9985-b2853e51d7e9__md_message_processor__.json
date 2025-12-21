@@ -1,0 +1,11 @@
+{
+    "inputMessageMetadata": {},
+    "outputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "API_solicitud-transporte"
+        }
+    },
+    "id": "427a9efc-51bb-4beb-9985-b2853e51d7e9",
+    "version": "5.2.0.0"
+}

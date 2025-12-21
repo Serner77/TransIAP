@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/apikit" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/apikit http://www.mulesoft.org/schema/mule/apikit/current/mule-apikit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd">
+    <http:listener-config name="transAPI-httpListenerConfig" host="0.0.0.0" port="8081" doc:name="HTTP Listener Configuration"/>
+    <apikit:config name="transAPI-config" raml="transAPI.raml" consoleEnabled="false" doc:name="Router"/>
+    <flow name="transAPI-main">
+        <http:listener config-ref="transAPI-httpListenerConfig" path="/*" doc:name="HTTP"/>
+		<set-variable variableName="Accept" value="#[message.inboundProperties.accept]" doc:name="Variable"/>
+        <apikit:router config-ref="transAPI-config" doc:name="APIkit Router"/>
+        <exception-strategy ref="transAPI-apiKitGlobalExceptionMapping" doc:name="Reference Exception Strategy"/>
+    </flow>
+    <flow name="transAPI-console">
+        <http:listener config-ref="transAPI-httpListenerConfig" path="/console/*" doc:name="HTTP"/>
+        <apikit:console config-ref="transAPI-config" doc:name="APIkit Console"/>
+    </flow>
+	<flow name="cambiarEstadoTraslado">
+		<logger message="#[payload]" level="INFO" doc:name="Logger"/>
+		<logger message="DEBUG | payload='#[payload]' | type=#[payload.getClass()]" level="INFO" doc:name="Logger"/>
+		<choice doc:name="Choice">
+			<when expression="#[payload == 'disponible' || payload == 'asignado' || payload == 'entregado']">
+				<db:update config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[UPDATE traslado
+SET estado = #[payload],
+    ultima_ubicacion = NULL
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
+				</db:update>
+				<choice doc:name="Choice">
+					<when expression="payload &gt; 0">
+						<set-payload value="#[{'mensaje' : 'Estado actualizado correctamente'}] " doc:name="Set Payload"/>
+					</when>
+					<otherwise>
+						<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
+						<set-payload value="#[{ &quot;mensaje&quot;: &quot;Traslado no encontrado&quot; }]" doc:name="Set Payload"/>
+					</otherwise>
+				</choice>
+			</when>
+			<otherwise>
+				<set-property propertyName="httpStatus" value="400" doc:name="Property"/>
+				<set-payload value="#[{ &quot;mensaje&quot;: &quot;Estado no v&#225;lido. Use: disponible, asignado o entregado&quot; }]" doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
+	</flow>
+    <flow name="put:/traslados/{idTraslado}:application/json:transAPI-config">
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload.estado]]></dw:set-payload>
+		</dw:transform-message>
+		<flow-ref name="cambiarEstadoTraslado" doc:name="Flow Reference"/>
+
+
+    </flow>
+    <flow name="put:/traslados/{idTraslado}:application/xml:transAPI-config">
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload.TrasladoEstado.estado]]></dw:set-payload>
+		</dw:transform-message>
+		<flow-ref name="cambiarEstadoTraslado" doc:name="Flow Reference"/>
+
+    </flow>
+    <flow name="delete:/solicitudes-transporte/{idSolicitud}:transAPI-config">
+		<db:delete config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[DELETE FROM solicitud_transporte 
+WHERE id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:parameterized-query>
+		</db:delete>
+
+    </flow>
+    <flow name="get:/companias/{idCompania}/contenedores:transAPI-config">
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT con.idc, con.tipo, con.peso, con.precinto, con.dimension
+FROM contenedor con, solicitud_descarga sol 
+WHERE con.descarga = sol.id AND sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept contains 'application/json']">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message" metadata:id="52293dc5-38e2-4102-a385-e4d2c0115d51">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+	contenedores: {
+		(payload map ((payload01 , indexOfPayload01) -> {
+			contenedor: {
+				idc: payload01.idc,
+				tipo: payload01.tipo,
+				peso: payload01.peso,
+				dimension: payload01.dimension,
+				precinto: payload01.precinto
+			}
+		}))
+	}
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</otherwise>
+		</choice>
+
+    </flow>
+    <flow name="get:/companias/{idCompania}/traslados:transAPI-config">
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT
+    tra.idt,
+    tra.fechaEntrega,
+    tra.estado,
+    tra.contenedor,
+    dir.ciudad,
+    dir.codigo_pais
+FROM traslado tra
+JOIN contenedor con ON tra.contenedor = con.idc
+JOIN solicitud_descarga sol ON con.descarga = sol.id
+JOIN direccion dir ON tra.destino = dir.id
+WHERE sol.naviera = #[message.inboundProperties.'http.uri.params'.idCompania] 
+  AND tra.estado = CASE 
+                       WHEN #[message.inboundProperties.'http.query.params'.entregado] = 'true' THEN 'entregado' 
+                       WHEN #[message.inboundProperties.'http.query.params'.entregado] = 'false' THEN 'pendiente' 
+                       ELSE tra.estado
+                   END]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept == 'application/json']">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message" metadata:id="427a9efc-51bb-4beb-9985-b2853e51d7e9">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+	traslados: {
+		(payload map ((payload01 , indexOfPayload01) -> {
+			traslado: {
+				idTraslado: payload01.idt,
+				fechaEntrega: payload01.fechaEntrega,
+				estado: payload01.estado,
+				idContenedor: payload01.contenedor,
+				ciudad: payload01.ciudad,
+				pais: payload01.codigo_pais
+			}
+		}))
+	}
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</otherwise>
+		</choice>
+
+    </flow>
+    <flow name="get:/contenedores/{idContenedor}:transAPI-config">
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT 
+    con.idc AS contenedor_id,
+    con.tipo,
+    con.dimension,
+    con.peso,
+    con.precinto,
+    tra.idt AS traslado_id,
+    tra.fechaEntrega,
+    tra.estado AS traslado_estado,
+    dir.direccion,
+    dir.ciudad,
+    dir.codigo_pais
+FROM contenedor con
+LEFT JOIN traslado tra 
+    ON con.idc = tra.contenedor
+LEFT JOIN direccion dir 
+    ON tra.destino = dir.id
+WHERE con.idc = #[message.inboundProperties.'http.uri.params'.idContenedor]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept == 'application/json']">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message" metadata:id="427a9efc-51bb-4beb-9985-b2853e51d7e9">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+  traslados: {
+    (payload map ((item, index) -> {
+      traslado: {
+        idTraslado: item.traslado_id,
+        fechaEntrega: item.fechaEntrega,
+        estado: item.traslado_estado,
+        idContenedor: item.contenedor_id,
+        dimension: item.dimension,
+        peso: item.peso,
+        precinto: item.precinto,
+        tipo: item.tipo,
+        direccion: item.direccion,
+        ciudad: item.ciudad,
+        pais: item.codigo_pais
+      }
+    }))
+  }
+}
+]]></dw:set-payload>
+				</dw:transform-message>
+			</otherwise>
+		</choice>
+
+    </flow>
+    <flow name="get:/solicitudes-transporte/{idSolicitud}:transAPI-config">
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT 
+    st.id AS solicitud_id,
+    st.timestamp AS solicitud_timestamp,
+    st.aprobada AS solicitud_aprobada,
+    st.terminada AS solicitud_terminada,
+    st.traslado AS solicitud_traslado,
+
+    v.matricula AS vehiculo_matricula,
+    v.PMA AS vehiculo_pma,
+    v.ETN AS vehiculo_etn,
+
+    t.id AS transportista_id,
+    t.nombre AS transportista_nombre,
+    t.licencia AS transportista_licencia,
+    t.externo AS transportista_externo
+    
+FROM solicitud_transporte st
+INNER JOIN vehiculo v ON st.vehiculo = v.matricula
+INNER JOIN transportista t ON v.transportista = t.id
+WHERE st.id = #[message.inboundProperties.'http.uri.params'.idSolicitud]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Accept == &quot;application/json&quot;]">
+				<json:object-to-json-transformer doc:name="Object to JSON"/>
+			</when>
+			<otherwise>
+				<dw:transform-message doc:name="Transform Message" metadata:id="52293dc5-38e2-4102-a385-e4d2c0115d51">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+---
+{
+	respuestaSolicitud: {
+		solicitud: {
+			id: payload.solicitud_id,
+			timestamp: payload.solicitud_timestamp,
+			aprobada: payload.solicitud_aprobada,
+			terminada: payload.solicitud_terminada,
+			idTraslado: payload.solicitud_traslado
+		},
+		vehiculo: {
+			matricula: payload.vehiculo_matricula,
+			PMA: payload.vehiculo_pma,
+			ETN: payload.vehiculo_etn
+		},
+		transportista: {
+			nombre: payload.transportista_nombre,
+			licencia: payload.transportista_licencia,
+			externo: payload.transportista_externo
+		}
+	}
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</otherwise>
+		</choice>
+
+    </flow>
+
+    <flow name="post:/traslados/{idTraslado}/localizaciones:transAPI-config">
+		<set-variable variableName="Cabecera" value="#[message.inboundProperties['Content-Type']]" doc:name="Variable"/>
+		<choice doc:name="Choice">
+			<when expression="#[flowVars.Cabecera=='application/json']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="81e90fd3-f3b9-4ce8-9a26-906b828416a9">
+					<dw:input-payload mimeType="application/json"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	latitud: payload.latitud as :string,
+	longitud: payload.longitud as :string,
+	timestamp:
+    (payload.timestamp as :datetime)
+      as :string
+      { format: "yyyy-MM-dd HH:mm:ss" }
+}]]></dw:set-payload>
+				</dw:transform-message>
+
+			</when>
+			<when expression="#[flowVars.Cabecera=='application/xml']">
+				<dw:transform-message doc:name="Transform Message">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload
+]]></dw:set-payload>
+				</dw:transform-message>
+				<dw:transform-message doc:name="Transform Message">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	latitud: payload.LocalizacionGPS.latitud as :string,
+	longitud: payload.LocalizacionGPS.longitud as :string,
+	timestamp:
+    (payload.LocalizacionGPS.timestamp as :datetime)
+      as :string
+      { format: "yyyy-MM-dd HH:mm:ss" }
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</when>
+
+			<otherwise>
+				<set-property propertyName="httpType" value="400" doc:name="Property"/>
+				<set-payload value="#[{&quot;message&quot;: &quot;Tipo no v&#225;lido&quot;}]" doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
+		<set-variable variableName="TrasladoVariable" value="#[payload]" doc:name="Variable"/>
+
+
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT *
+FROM traslado
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
+
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[payload == null or payload.size() == 0]">
+				<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
+				<set-payload value="#[{&quot;error&quot;: &quot;EL traslado no existe&quot;}]" doc:name="Set Payload"/>
+			</when>
+			<otherwise>
+				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[INSERT INTO locallizacion_gps(timestamp, traslado, latitud, longitud)
+VALUES(
+	#[flowVars.TrasladoVariable.timestamp],
+	#[message.inboundProperties.'http.uri.params'.idTraslado],
+	#[flowVars.TrasladoVariable.latitud],
+	#[flowVars.TrasladoVariable.longitud]
+)]]></db:parameterized-query>
+				</db:insert>
+				<db:update config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[UPDATE traslado
+SET 
+	ultima_ubicacion = #[flowVars.TrasladoVariable.timestamp]
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
+				</db:update>
+			</otherwise>
+		</choice>
+
+
+    </flow>
+
+    <flow name="post:/traslados/{idTraslado}/solicitud-transporte:transAPI-config">
+		<set-variable variableName="Cabecera" value="#[message.inboundProperties['Content-Type']]" doc:name="Variable"/>
+		<choice doc:name="Choice">
+
+			<when expression="#[flowVars.Cabecera=='application/json']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="6967a31c-bc05-42a5-aa61-36f328b0a5df">
+					<dw:input-payload mimeType="application/json"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+    vehiculo: payload.vehiculo
+}]]></dw:set-payload>
+				</dw:transform-message>
+
+			</when>
+			<when expression="#[flowVars.Cabecera=='application/xml']">
+				<dw:transform-message doc:name="Transform Message" metadata:id="398271c4-ecf9-47cf-9072-e81aa7331359">
+					<dw:input-payload mimeType="application/xml"/>
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+payload]]></dw:set-payload>
+				</dw:transform-message>
+				<dw:transform-message doc:name="Transform Message" metadata:id="03768aba-ad8c-4584-b3cb-6aa025a80112">
+					<dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+    vehiculo: payload.SolicitudTransporte.vehiculo
+}]]></dw:set-payload>
+				</dw:transform-message>
+			</when>
+			<otherwise>
+				<set-property propertyName="httpType" value="400" doc:name="Property"/>
+				<set-payload value="#[{&quot;message&quot;: &quot;Tipo no v&#225;lido&quot;}]" doc:name="Set Payload"/>
+			</otherwise>
+		</choice>
+		<set-variable variableName="SolicitudVariable" value="#[payload]" doc:name="Variable"/>
+		<logger message="Json transformado" level="INFO" doc:name="Logger"/>
+		<db:select config-ref="MySQL_Configuration" doc:name="Database">
+			<db:parameterized-query><![CDATA[SELECT *
+FROM traslado
+WHERE idt = #[message.inboundProperties.'http.uri.params'.idTraslado]]]></db:parameterized-query>
+		</db:select>
+		<choice doc:name="Choice">
+			<when expression="#[payload == null or payload.size() == 0]">
+				<set-property propertyName="httpStatus" value="404" doc:name="Property"/>
+			</when>
+			<otherwise>
+				<set-variable variableName="RandomId" value="#[System.currentTimeMillis() % 1000000000]" doc:name="Variable"/>
+				<db:insert config-ref="MySQL_Configuration" doc:name="Database">
+					<db:parameterized-query><![CDATA[INSERT INTO solicitud_transporte(id, timestamp, aprobada, terminada, traslado, vehiculo)
+VALUES(
+  #[flowVars.RandomId],
+  CURRENT_TIMESTAMP,
+  0,
+  0,
+  #[message.inboundProperties.'http.uri.params'.idTraslado],
+  #[flowVars.SolicitudVariable.vehiculo]
+)]]></db:parameterized-query>
+				</db:insert>
+			</otherwise>
+		</choice>
+
+
+    </flow>
+
+    <apikit:mapping-exception-strategy name="transAPI-apiKitGlobalExceptionMapping">
+        <apikit:mapping statusCode="404">
+            <apikit:exception value="org.mule.module.apikit.exception.NotFoundException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Resource not found&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="405">
+            <apikit:exception value="org.mule.module.apikit.exception.MethodNotAllowedException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Method not allowed&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="415">
+            <apikit:exception value="org.mule.module.apikit.exception.UnsupportedMediaTypeException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Unsupported media type&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="406">
+            <apikit:exception value="org.mule.module.apikit.exception.NotAcceptableException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Not acceptable&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+        <apikit:mapping statusCode="400">
+            <apikit:exception value="org.mule.module.apikit.exception.BadRequestException" />
+            <set-property propertyName="Content-Type" value="application/json" doc:name="Property"/>
+            <set-payload value="{ &quot;message&quot;: &quot;Bad request&quot; }" doc:name="Set Payload"/>
+        </apikit:mapping>
+    </apikit:mapping-exception-strategy>
+</mule>

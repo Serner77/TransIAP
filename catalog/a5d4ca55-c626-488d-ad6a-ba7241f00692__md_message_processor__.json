@@ -1,0 +1,16 @@
+{
+    "inputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "NuevaLocalizacionXML"
+        }
+    },
+    "outputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "TrasladoMap"
+        }
+    },
+    "id": "a5d4ca55-c626-488d-ad6a-ba7241f00692",
+    "version": "5.2.0.0"
+}

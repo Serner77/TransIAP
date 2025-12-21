@@ -1,0 +1,242 @@
+#%RAML 1.0
+title: STC REST API
+version: v1
+baseUri: http://localhost:8081/api
+protocols:
+  - HTTP
+mediaType:
+  - application/json
+  - application/xml
+
+description: >
+  API REST del sistema STC del proyecto TransIAP.
+
+types:
+
+  Contenedor:
+    type: object
+    properties:
+      idc: string
+      tipo: string
+      peso: integer
+      dimension: string
+      precinto: integer
+      descarga: integer
+
+  CompaniaNaviera:
+    type: object
+    properties:
+      id: string
+      nombre: string
+      codigo_pais: string
+
+  Direccion:
+    type: object
+    properties:
+      id: string
+      direccion: string
+      cp: integer
+      ciudad: string
+      codigo_pais: string
+
+  Traslado:
+    type: object
+    properties:
+      idt: string
+      fechaEntrega: string
+      estado: string
+      destino: string
+      contenedor: string
+      ultima_ubicacion:
+        type: datetime
+        required: false
+
+  LocalizacionGPS:
+    type: object
+    properties:
+      timestamp: datetime
+      latitud: number
+      longitud: number
+
+  Transportista:
+    type: object
+    properties:
+      id: string
+      nombre: string
+      licencia: string
+      externo: integer
+
+  Vehiculo:
+    type: object
+    properties:
+      matricula: string
+      PMA: string
+      ETN: string
+      transportista: string
+
+  SolicitudTransporte:
+    type: object
+    properties:
+      vehiculo: string
+
+  SolicitudDescarga:
+    type: object
+    properties:
+      id: integer
+      fecha: string
+      naviera: string
+      
+  TrasladoEstado:
+    type: object
+    properties:
+      estado:
+        type: string
+
+/companias:
+  /{idCompania}:
+    uriParameters:
+      idCompania:
+        type: string
+
+    /contenedores:
+      get:
+        description: Obtiene los contenedores de una compañía naviera.
+        responses:
+          200:
+            body:
+              application/json:
+                type: Contenedor[]
+              application/xml:
+                type: Contenedor[]
+          404:
+            body:
+              text/plain:
+                type: string
+                example: "Compañía no encontrada"
+
+    /traslados:
+      get:
+        description: Obtiene los traslados de una compañía naviera.
+        queryParameters:
+          entregado:
+            type: boolean
+            required: false
+        responses:
+          200:
+            body:
+              application/json:
+                type: Traslado[]
+              application/xml:
+                type: Traslado[]
+          404:
+            body:
+              text/plain:
+                type: string
+                example: "Compañía no encontrada"
+
+/contenedores:
+  /{idContenedor}:
+    uriParameters:
+      idContenedor:
+        type: string
+
+    get:
+      description: Obtiene la información de un contenedor.
+      responses:
+        200:
+          body:
+            application/json:
+              type: Contenedor
+            application/xml:
+              type: Contenedor
+        404:
+          body:
+            text/plain:
+              type: string
+              example: "Contenedor no encontrado"
+
+/traslados:
+  /{idTraslado}:
+    uriParameters:
+      idTraslado:
+        type: string
+
+    put:
+      description: Cambia el estado de un traslado.
+      body:
+        application/json:
+          type: TrasladoEstado
+        application/xml:
+          type: TrasladoEstado
+      responses:
+        200:
+          description: Estado actualizado correctamente
+          body:
+            application/json:
+             properties:
+               mensaje:
+                type: string
+        400:
+          body:
+            application/json:
+              properties:
+                mensaje:
+                  type: string
+        404:
+          body:
+            application/json:
+              properties:
+                mensaje:
+                  type: string
+        
+
+    /localizaciones:
+      post:
+        description: Añade una localización GPS a un traslado.
+        body:
+          application/json:
+            type: LocalizacionGPS
+          application/xml:
+            type: LocalizacionGPS
+        responses:
+          201:
+            description: Localización añadida correctamente
+
+    /solicitud-transporte:
+      post:
+        description: Solicita transporte para un traslado.
+        body:
+          application/json:
+            type: SolicitudTransporte
+          application/xml:
+            type: SolicitudTransporte
+        responses:
+          201:
+            description: Solicitud de transporte creada correctamente
+
+/solicitudes-transporte:
+  /{idSolicitud}:
+    uriParameters:
+      idSolicitud:
+        type: integer
+
+    get:
+      description: Obtiene la información de una solicitud de transporte.
+      responses:
+        200:
+          body:
+            application/json:
+              type: SolicitudTransporte
+            application/xml:
+              type: SolicitudTransporte
+        404:
+          body:
+            text/plain:
+              type: string
+              example: "Solicitud no encontrada"
+
+    delete:
+      description: Elimina una solicitud de transporte.
+      responses:
+        204:
+          description: Solicitud eliminada correctamente

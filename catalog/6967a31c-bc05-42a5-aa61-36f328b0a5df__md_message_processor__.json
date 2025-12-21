@@ -1,0 +1,16 @@
+{
+    "inputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "solictudTransporteJSON"
+        }
+    },
+    "outputMessageMetadata": {
+        "messagePayload": {
+            "connectorName": "#_custom_mule_metadata_type_#",
+            "typeId": "solTrasladoMap"
+        }
+    },
+    "id": "6967a31c-bc05-42a5-aa61-36f328b0a5df",
+    "version": "5.2.0.0"
+}
