@@ -1,0 +1,29 @@
+package productor;
+
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+
+public class productor_csv {
+
+	public static void main(String[] args) throws IOException, TimeoutException{
+		
+		if (args.length != 3 ) {
+			System.out.println("Usage: $0 rabbitMQbroker productor-id cola-id");
+			return;
+		}
+
+		String rabbitMQ_broker = args[0];
+		String ID = args[1];
+		String NOMBRE_COLA = args[2];
+		
+		//1. Creamos una conexión con el broker
+		ConnectionFactory factory = new ConnectionFactory();
+		factory.setHost(rabbitMQ_broker);
+		Connection connection = factory.newConnection();
+		System.out.println("[" + ID + "] Conectado a broker RabbitMQ " + rabbitMQ_broker);
+	}
+
+}
