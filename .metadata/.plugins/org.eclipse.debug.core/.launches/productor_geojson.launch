@@ -7,6 +7,6 @@
 <listEntry value="1"/>
 </listAttribute>
 <stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="productor.productor_geojson"/>
-<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="localhost P2"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="localhost P_GEOJSON"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="generador_geojson"/>
 </launchConfiguration>

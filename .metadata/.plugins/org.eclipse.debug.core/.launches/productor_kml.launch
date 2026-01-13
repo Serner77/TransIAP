@@ -7,6 +7,6 @@
 <listEntry value="1"/>
 </listAttribute>
 <stringAttribute key="org.eclipse.jdt.launching.MAIN_TYPE" value="productor.productor_kml"/>
-<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="localhost P3"/>
+<stringAttribute key="org.eclipse.jdt.launching.PROGRAM_ARGUMENTS" value="localhost P_KML"/>
 <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="generador_kml"/>
 </launchConfiguration>
