@@ -1,0 +1,245 @@
+package middleware_live;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import com.rabbitmq.client.*;
+
+public class SoporteLogisticaLive {
+
+    // ===== RabbitMQ IN =====
+    private static final String IN_EXCHANGE = "generadorComun";
+    private static final String IN_EXCHANGE_TYPE = "topic";
+    private static final String IN_BINDING_KEY = "location.*";
+
+    // ===== RabbitMQ OUT =====
+    private static final String OUT_EXCHANGE = "traslados.localizaciones";
+    private static final String OUT_EXCHANGE_TYPE = "fanout"; // recomendado
+
+    // ===== REST SNTN =====
+    // baseUri según RAML del enunciado (sección 5)
+    private static final String REST_BASE = "https://pedvalar.webs.upv.es/iap/rest/sntn";
+
+    public static void main(String[] args) throws IOException, TimeoutException {
+
+        // Uso: java soporte.SoporteLogisticaLive <rabbitMQbroker> <id>
+        if (args.length != 2) {
+            System.out.println("Usage: java soporte.SoporteLogisticaLive <rabbitMQbroker> <id>");
+            System.out.println("Example: java soporte.SoporteLogisticaLive localhost LIVE_1");
+            return;
+        }
+
+        String rabbitMQ_broker = args[0];
+        final String ID = args[1];
+
+        // 1) Conexión RabbitMQ
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost(rabbitMQ_broker);
+
+        Connection connection = factory.newConnection();
+        final Channel channel = connection.createChannel();
+
+        // 2) Declarar exchanges
+        channel.exchangeDeclare(IN_EXCHANGE, IN_EXCHANGE_TYPE, false);
+        channel.exchangeDeclare(OUT_EXCHANGE, OUT_EXCHANGE_TYPE, false);
+
+        // 3) Cola de entrada (tu middleware)
+        // mejor que NO sea temporal si vais a usarlo “en serio”
+        String inQueue = "q.soporte.live";
+        channel.queueDeclare(inQueue, false, false, false, null);
+        channel.queueBind(inQueue, IN_EXCHANGE, IN_BINDING_KEY);
+
+        System.out.println("[" + ID + "] Conectado a RabbitMQ " + rabbitMQ_broker);
+        System.out.println("[" + ID + "] Consumiendo: exchange=" + IN_EXCHANGE + " binding=" + IN_BINDING_KEY + " queue=" + inQueue);
+        System.out.println("[" + ID + "] Publicando en: exchange=" + OUT_EXCHANGE + " (" + OUT_EXCHANGE_TYPE + ")");
+        System.out.println("[" + ID + "] REST base: " + REST_BASE);
+        System.out.println();
+
+        // 4) Consumidor
+        DefaultConsumer consumer = new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope,
+                                       AMQP.BasicProperties properties, byte[] body) throws IOException {
+
+                String rk = envelope.getRoutingKey();
+                String msg = new String(body, StandardCharsets.UTF_8);
+
+                try {
+                    // Parse según routing key
+                    ParsedLocation loc = parseLocation(rk, msg);
+
+                    // REST: key + timestamp
+                    String appKey = fetchAppKey(loc.matricula);
+                    String timeStamp = fetchTimeStamp();
+
+                    // Construir TransIAP-loc/JSON (sección 6)
+                    String outJson = buildTransIAPJson(loc.matricula, loc.lat, loc.lon, appKey, timeStamp);
+
+                    // Publicar al exchange final
+                    channel.basicPublish(OUT_EXCHANGE, "", null, outJson.getBytes(StandardCharsets.UTF_8));
+
+                    System.out.println("[" + ID + "] OK (" + rk + ") -> " + outJson);
+
+                } catch (Exception e) {
+                    System.out.println("[" + ID + "] ERROR procesando (" + rk + "): " + e.getMessage());
+                    // aquí podrías enviar a una DLQ si quisierais
+                }
+            }
+        };
+
+        channel.basicConsume(inQueue, true, consumer);
+    }
+
+    // =======================
+    // ======= PARSERS =======
+    // =======================
+
+    private static ParsedLocation parseLocation(String routingKey, String payload) {
+        if ("location.csv".equals(routingKey)) {
+            return parseCSV(payload);
+        }
+        if ("location.geojson".equals(routingKey)) {
+            return parseGeoJSON(payload);
+        }
+        if ("location.kml".equals(routingKey)) {
+            return parseKML(payload);
+        }
+        throw new IllegalArgumentException("Routing key no soportada: " + routingKey);
+    }
+
+    private static ParsedLocation parseCSV(String payload) {
+        // "matricula, latitud, longitud"
+        String[] parts = payload.split(",");
+        if (parts.length < 3) throw new IllegalArgumentException("CSV inválido: " + payload);
+
+        String matricula = parts[0].trim();
+        double lat = Double.parseDouble(parts[1].trim());
+        double lon = Double.parseDouble(parts[2].trim());
+
+        return new ParsedLocation(matricula, lat, lon);
+    }
+
+    private static ParsedLocation parseGeoJSON(String payload) {
+        // Tu productor genera:
+        // { "type":"Feature", "geometry":{ "type":"Point", "coordinates":[lat, lon] }, "properties":{ "vehicle":"matricula" } }
+        String matricula = extractJsonString(payload, "\"vehicle\"\\s*:\\s*\"([^\"]+)\"");
+        String coords = extractJsonString(payload, "\"coordinates\"\\s*:\\s*\\[\\s*([-0-9.]+)\\s*,\\s*([-0-9.]+)\\s*\\]");
+
+        // extractJsonString de coords devuelve el primer grupo; aquí lo hacemos con matcher doble:
+        Pattern p = Pattern.compile("\"coordinates\"\\s*:\\s*\\[\\s*([-0-9.]+)\\s*,\\s*([-0-9.]+)\\s*\\]");
+        Matcher m = p.matcher(payload);
+        if (!m.find()) throw new IllegalArgumentException("GeoJSON sin coordinates: " + payload);
+
+        double lat = Double.parseDouble(m.group(1));
+        double lon = Double.parseDouble(m.group(2));
+
+        return new ParsedLocation(matricula, lat, lon);
+    }
+
+    private static ParsedLocation parseKML(String payload) {
+        // Enunciado:
+        // <coordinates> latitud, longitud </coordinates>
+        // <Vehicle "id"="matricula"/>
+        String matricula = extractJsonString(payload, "id\"\\s*=\\s*\"([^\"]+)\"");
+        Pattern p = Pattern.compile("<coordinates>\\s*([-0-9.]+)\\s*,\\s*([-0-9.]+)\\s*</coordinates>");
+        Matcher m = p.matcher(payload);
+        if (!m.find()) throw new IllegalArgumentException("KML sin coordinates: " + payload);
+
+        double lat = Double.parseDouble(m.group(1));
+        double lon = Double.parseDouble(m.group(2));
+
+        return new ParsedLocation(matricula, lat, lon);
+    }
+
+    private static String extractJsonString(String text, String regex) {
+        Pattern p = Pattern.compile(regex);
+        Matcher m = p.matcher(text);
+        if (!m.find()) throw new IllegalArgumentException("No match regex: " + regex);
+        return m.group(1);
+    }
+
+    // =======================
+    // ========= REST =========
+    // =======================
+
+    private static String fetchAppKey(String matricula) throws IOException {
+        // RAML indica /key/{id}/get
+        String url = REST_BASE + "/key/" + matricula + "/get";
+        String resp = httpGet(url);
+
+        // respuesta: {"appKey":"..."}
+        String key = extractJsonString(resp, "\"appKey\"\\s*:\\s*\"([^\"]+)\"");
+        return key;
+    }
+
+    private static String fetchTimeStamp() throws IOException {
+        String url = REST_BASE + "/timestamp/get";
+        String resp = httpGet(url);
+
+        // respuesta: {"timeStamp":"..."}
+        String ts = extractJsonString(resp, "\"timeStamp\"\\s*:\\s*\"([^\"]+)\"");
+        return ts;
+    }
+
+    private static String httpGet(String urlStr) throws IOException {
+        URL url = new URL(urlStr);
+        HttpURLConnection con = (HttpURLConnection) url.openConnection();
+        con.setRequestMethod("GET");
+        con.setRequestProperty("Accept", "application/json");
+        con.setConnectTimeout(8000);
+        con.setReadTimeout(8000);
+
+        int code = con.getResponseCode();
+        BufferedReader br = new BufferedReader(new InputStreamReader(
+                (code >= 200 && code < 300) ? con.getInputStream() : con.getErrorStream(),
+                StandardCharsets.UTF_8
+        ));
+
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = br.readLine()) != null) sb.append(line);
+        br.close();
+        con.disconnect();
+
+        if (code < 200 || code >= 300) {
+            throw new IOException("HTTP " + code + " -> " + sb.toString());
+        }
+        return sb.toString();
+    }
+
+    // =======================
+    // ===== JSON OUTPUT =====
+    // =======================
+
+    private static String buildTransIAPJson(String matricula, double lat, double lon, String auth, String timestamp) {
+        // Formato según sección 6 del enunciado
+        return "{"
+            + "\"coordenadas\":{\"latitud\":" + lat + ",\"longitud\":" + lon + "},"
+            + "\"vehiculo\":\"" + matricula + "\","
+            + "\"auth\":\"" + auth + "\","
+            + "\"timestamp\":\"" + timestamp + "\""
+            + "}";
+    }
+
+    // =======================
+    // ====== DTO simple =====
+    // =======================
+
+    private static class ParsedLocation {
+        String matricula;
+        double lat;
+        double lon;
+        ParsedLocation(String m, double la, double lo) {
+            this.matricula = m;
+            this.lat = la;
+            this.lon = lo;
+        }
+    }
+}

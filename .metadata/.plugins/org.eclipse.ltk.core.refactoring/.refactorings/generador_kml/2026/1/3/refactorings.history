@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Copy 3 elements to &apos;lib&apos;&#x0D;&#x0A;- Original project: &apos;generador_kml&apos;&#x0D;&#x0A;- Destination element: &apos;lib&apos;&#x0D;&#x0A;- Original elements:&#x0D;&#x0A;     slf4j-simple-1.7.22.jar&#x0D;&#x0A;     amqp-client-4.0.2.jar&#x0D;&#x0A;     slf4j-api-1.7.21.jar" description="Copy files" element1="lib/slf4j-simple-1.7.22.jar" element2="lib/amqp-client-4.0.2.jar" element3="lib/slf4j-api-1.7.21.jar" files="3" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1768302771320" target="/middleware_live/lib" units="0" version="1.0"/>
+</session>
