@@ -1,0 +1,70 @@
+package productor;
+
+import generador_csv.Channel;
+import generador_csv.Connection;
+import generador_csv.ConnectionFactory;
+
+public class productor_csv {
+
+	public static void main(String[] args) {
+		 ConnectionFactory factory = new ConnectionFactory();
+	        factory.setHost(RABBIT_HOST);
+	        factory.setPort(RABBIT_PORT);
+	        factory.setUsername(RABBIT_USER);
+	        factory.setPassword(RABBIT_PASS);
+
+	        // Opcional: auto-recovery (recomendado en prácticas)
+	        factory.setAutomaticRecoveryEnabled(true);
+	        factory.setNetworkRecoveryInterval(3000);
+
+	        try (Connection connection = factory.newConnection();
+	             Channel channel = connection.createChannel()) {
+
+	            // Declaramos la cola (idempotente)
+	            boolean durable = true;      // que sobreviva reinicios del broker
+	            boolean exclusive = false;
+	            boolean autoDelete = false;
+
+	            channel.queueDeclare(QUEUE_NAME, durable, exclusive, autoDelete, null);
+
+	            System.out.println("✅ CSV Generator publicando en cola: " + QUEUE_NAME);
+
+	            while (true) {
+	                // 1) Generar una ubicación “fake” de ejemplo
+	                String matricula = "1234-ABC";
+	                double lat = randomBetween(39.40, 39.55);
+	                double lon = randomBetween(-0.45, -0.30);
+
+	                // 2) Formato TransIAP-CSV: matricula,latitud,longitud
+	                // OJO: sin espacios extra (por si el parser es estricto)
+	                String payload = matricula + "," + format6(lat) + "," + format6(lon);
+
+	                // 3) Publicar a la cola usando el exchange por defecto ("")
+	                // routingKey = nombre de la cola
+	                channel.basicPublish(
+	                        "",               // default exchange
+	                        QUEUE_NAME,       // routingKey = queue
+	                        null,
+	                        payload.getBytes(StandardCharsets.UTF_8)
+	                );
+
+	                System.out.println("📨 Enviado: " + payload);
+
+	                Thread.sleep(PERIOD_MS);
+	            }
+	        }
+	    }
+
+	    private static double randomBetween(double min, double max) {
+	        return ThreadLocalRandom.current().nextDouble(min, max);
+	    }
+
+	    // Para evitar notación rara y limitar decimales
+	    private static String format6(double x) {
+	        return String.format(java.util.Locale.US, "%.6f", x);
+	    }
+	}
+
+	}
+
+}

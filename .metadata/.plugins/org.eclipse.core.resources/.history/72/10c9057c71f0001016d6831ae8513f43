@@ -1,0 +1,74 @@
+package visualizador;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeoutException;
+
+import com.rabbitmq.client.AMQP;
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.DefaultConsumer;
+import com.rabbitmq.client.Envelope;
+
+public class Visualizador {
+
+    private static final String EXCHANGE_NAME = "generadorComun";
+    private static final String EXCHANGE_TYPE = "topic";
+    private static final String ROUTING_KEY = "location.*";
+
+    public static void main(String[] args) throws IOException, TimeoutException {
+
+        if (args.length != 2) {
+            System.out.println("Usage: java visualizador.VisualizadorCSV <rabbitMQbroker> <consumidor-id>");
+            System.out.println("Example: java visualizador.VisualizadorCSV localhost V_CSV");
+            return;
+        }
+
+        String rabbitMQ_broker = args[0];
+        final String ID = args[1];
+
+        // 1) Conexión
+        ConnectionFactory factory = new ConnectionFactory();
+        factory.setHost(rabbitMQ_broker);
+
+        final Connection connection = factory.newConnection();
+        System.out.println("[" + ID + "] Conectado a broker RabbitMQ " + rabbitMQ_broker);
+
+        // 2) Canal
+        final Channel channel = connection.createChannel();
+
+        // 3) Declarar exchange
+        channel.exchangeDeclare(EXCHANGE_NAME, EXCHANGE_TYPE, false);
+
+        // 4) Crear una cola temporal exclusiva para este consumidor
+        String queueName = channel.queueDeclare("", false, true, true, null).getQueue();
+
+        // 5) Bind de la cola al exchange con la routing key
+        channel.queueBind(queueName, EXCHANGE_NAME, ROUTING_KEY);
+
+        System.out.println("[" + ID + "] Escuchando exchange='" + EXCHANGE_NAME + "' tipo='" + EXCHANGE_TYPE + "'");
+        System.out.println("[" + ID + "] Routing key='" + ROUTING_KEY + "'");
+        System.out.println("[" + ID + "] Cola temporal='" + queueName + "'");
+        System.out.println("[" + ID + "] Preparado para consumir mensajes...\n");
+
+        // 6) Consumidor
+        DefaultConsumer consumer = new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag,
+                                       Envelope envelope,
+                                       AMQP.BasicProperties properties,
+                                       byte[] body) throws IOException {
+
+                String message = new String(body, StandardCharsets.UTF_8);
+                System.out.println("[" + ID + "] Recibido: " + message);
+            }
+        };
+
+        // 7) Consumir (auto-ack=true)
+        channel.basicConsume(queueName, true, consumer);
+
+        // NOTA: No se cierra la app, se queda escuchando
+    }
+}
+

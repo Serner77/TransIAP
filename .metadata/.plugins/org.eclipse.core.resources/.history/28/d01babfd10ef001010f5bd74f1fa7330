@@ -1,0 +1,53 @@
+package productor;
+
+import java.io.IOException;
+import java.util.Scanner;
+import java.util.concurrent.TimeoutException;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+
+public class productor_csv {
+
+	public static void main(String[] args) throws IOException, TimeoutException{
+		
+		if (args.length != 3 ) {
+			System.out.println("Usage: $0 rabbitMQbroker productor-id cola-id");
+			return;
+		}
+
+		String rabbitMQ_broker = args[0];
+		String ID = args[1];
+		String NOMBRE_COLA = args[2];
+		
+		//1. Creamos una conexión con el broker
+		ConnectionFactory factory = new ConnectionFactory();
+		factory.setHost(rabbitMQ_broker);
+		Connection connection = factory.newConnection();
+		System.out.println("[" + ID + "] Conectado a broker RabbitMQ " + rabbitMQ_broker);
+		
+		//2. Creamos un canal de comunicación
+		Channel channel = connection.createChannel();
+		
+		//3. Declaramos el tipo de comunicación (en este caso, por defecto, DIRECTA)
+		channel.queueDeclare(NOMBRE_COLA, false, false, false, null);
+		
+		//4. Publicamos mensajes
+		Scanner scan = new Scanner(System.in);
+		System.out.print("Introduce Mensaje: ");
+		String message = scan .nextLine();
+		while ( !message.equals("salir")) {
+			channel.basicPublish("", NOMBRE_COLA, null, message.getBytes());
+			System.out.println(" --> Mensaje " + message + " enviado desde " + ID);
+			System.out.print("Introduce Mensaje: ");
+			message = scan.nextLine();
+		}
+		scan.close();
+		
+		//5. Cerramos la conexión
+		connection.close();
+		System.out.println("\n[" + ID + "] Conexión cerrada!");
+	}
+
+}

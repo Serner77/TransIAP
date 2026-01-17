@@ -1,0 +1,30 @@
+!SESSION 2025-11-07 11:12:19.100 -----------------------------------------------
+eclipse.buildId=unknown
+java.version=1.8.0_302
+java.vendor=Temurin
+BootLoader constants: OS=win32, ARCH=x86_64, WS=win32, NL=es_ES
+Command-line arguments:  -os win32 -ws win32 -arch x86_64
+
+!ENTRY org.mule.tooling.core 2 0 2025-11-07 11:12:35.925
+!MESSAGE C:\Users\Administrador.WIN-2O4P6U7CI32\.m2\repository does not exist or contain a maven repository
+
+!ENTRY org.mule.tooling.core 2 0 2025-11-07 11:12:35.956
+!MESSAGE C:\Users\Administrador.WIN-2O4P6U7CI32\.m2\repository does not exist or contain a maven repository
+
+!ENTRY org.eclipse.ui 4 4 2025-11-07 11:12:38.722
+!MESSAGE Referenced part does not exist yet: org.eclipse.ui.views.ContentOutline.
+
+!ENTRY org.eclipse.ui 4 4 2025-11-07 11:12:38.737
+!MESSAGE Referenced part does not exist yet: org.eclipse.ui.views.ContentOutline.
+
+!ENTRY org.mule.tooling.analytics 1 0 2025-11-07 11:12:55.834
+!MESSAGE Analytics enable property is set with true
+
+!ENTRY org.mule.tooling.analytics 1 0 2025-11-07 11:12:55.959
+!MESSAGE Analytics enable property is set with true
+
+!ENTRY org.mule.tooling.analytics 1 0 2025-11-07 11:13:03.481
+!MESSAGE Analytics enable property is set with true
+
+!ENTRY org.mule.tooling.analytics 1 0 2025-11-07 11:13:03.497
+!MESSAGE Analytics enable property is set with true
