@@ -1,13 +1,11 @@
 package registro;
 
 import com.rabbitmq.client.*;
-
 import dao.DAOFactory;
 import dao.LocalizacionGPSDAO;
 import dao.TrasladoDAO;
 import domain.LocalizacionGPS;
 import domain.Traslado;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
@@ -23,8 +21,8 @@ public class RegistroBD {
         System.out.println("  REGISTRO BD STC - INICIANDO");
         
         if (args.length != 2) {
-            System.out.println("Uso: java registro_bd.RegistroBDMain <broker> <id>");
-            System.out.println("Ej: java registro_bd.RegistroBDMain localhost REG1");
+            System.out.println("Uso: java registro.RegistroBD <broker> <id>");
+            System.out.println("Ej: java registro.RegistroBD localhost REG1");
             return;
         }
         
@@ -54,9 +52,9 @@ public class RegistroBD {
         channel.queueBind(queueName, RABBITMQ_EXCHANGE, "");
         
         System.out.println("[RabbitMQ] Conectado a: " + broker);
-        System.out.println("[RabbitMQ] Suscrito a exchange: " + RABBITMQ_EXCHANGE + " (fanout)");
+        System.out.println("[RabbitMQ] Suscrito a exchange: " + RABBITMQ_EXCHANGE);
         System.out.println("[RabbitMQ] Cola: " + queueName);
-        System.out.println("[" + consumerId + "] Esperando mensajes...\n");
+        System.out.println("[" + consumerId + "] Esperando mensajes...");
         
         Consumer consumer = new DefaultConsumer(channel) {
             @Override
@@ -70,7 +68,9 @@ public class RegistroBD {
                     String[] datos = extraerDatos(mensaje);
                     
                     if (datos == null) {
-                        throw new Exception("Formato mensaje incorrecto");
+                        System.err.println("[" + consumerId + "] Formato incorrecto");
+                        channel.basicNack(envelope.getDeliveryTag(), false, false);
+                        return;
                     }
                     
                     String matricula = datos[0];
@@ -80,25 +80,42 @@ public class RegistroBD {
                     boolean exito = guardarEnBD(matricula, latitud, longitud);
                     
                     if (exito) {
-                        System.out.println("[" + consumerId + "] Guardado en BD: " + matricula);
-                        System.out.println("  Latitud: " + latitud + ", Longitud: " + longitud);
+                        System.out.println("[" + consumerId + "] Guardado: " + matricula);
                         channel.basicAck(envelope.getDeliveryTag(), false);
                     } else {
-                        System.err.println("[" + consumerId + "] Error al guardar en BD para: " + matricula);
-                        channel.basicNack(envelope.getDeliveryTag(), false, true);
+                        System.err.println("[" + consumerId + "] Error persistente - Descartando");
+                        channel.basicNack(envelope.getDeliveryTag(), false, false);
                     }
                     
+                } catch (NumberFormatException e) {
+                    System.err.println("[" + consumerId + "] Error numerico");
+                    channel.basicNack(envelope.getDeliveryTag(), false, false);
                 } catch (Exception e) {
                     System.err.println("[" + consumerId + "] ERROR: " + e.getMessage());
-                    channel.basicNack(envelope.getDeliveryTag(), false, false);
+                    
+                    if (e.getMessage() != null && 
+                        (e.getMessage().contains("connect") || 
+                         e.getMessage().contains("Connection"))) {
+                        channel.basicNack(envelope.getDeliveryTag(), false, true);
+                    } else {
+                        channel.basicNack(envelope.getDeliveryTag(), false, false);
+                    }
                 }
             }
         };
         
         channel.basicConsume(queueName, false, consumer);
         
+        System.out.println("[" + consumerId + "] Servicio activo.");
+        
         while (true) {
-            Thread.sleep(1000);
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                channel.close();
+                connection.close();
+                break;
+            }
         }
     }
     
@@ -160,7 +177,18 @@ public class RegistroBD {
             
         } catch (Exception e) {
             System.err.println("Error BD: " + e.getMessage());
-            return false;
+            
+            if (e.getMessage() != null) {
+                String msg = e.getMessage().toLowerCase();
+                if (msg.contains("no hay traslado") || 
+                    msg.contains("matricula") || 
+                    msg.contains("not found") ||
+                    msg.contains("no existe")) {
+                    return false;
+                }
+            }
+            
+            throw e;
         }
     }
 }
